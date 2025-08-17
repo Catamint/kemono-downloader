@@ -1,13 +1,14 @@
 import re
 
 import aiohttp
+from cilent_session import create_session
+import json
 
 from file import sanitize_filename, rename_list
 
-
 async def extract_attachments_urls(user_url: str) -> list[dict]:
-    user = user_url.split('https://kemono.su/')[-1]
-    async with aiohttp.ClientSession() as session:
+    user = user_url.split('https://kemono.cr/')[-1]
+    async with create_session() as session:
         posts = await GetPosts(user, session)
         detailed_posts = await GetPostsAttachments(posts, session)
 
@@ -20,7 +21,7 @@ async def extract_attachments_urls(user_url: str) -> list[dict]:
         title = sanitize_filename(post["title"])
         day = post["day"]
         id = post["id"]
-        base_url = "https://kemono.su/data"
+        base_url = "https://kemono.cr/data"
 
         for att in post["attachments"]:
             name = att.get("name", "")
@@ -53,7 +54,7 @@ async def extract_attachments_urls(user_url: str) -> list[dict]:
 
 async def GetPosts(user: str, session: aiohttp.ClientSession) -> list[dict]:
     n = 0
-    getPostsUrl = f"https://kemono.su/api/v1/{user}"
+    getPostsUrl = f"https://kemono.cr/api/v1/{user}/posts"
     posts = []
 
     while True:
@@ -61,14 +62,15 @@ async def GetPosts(user: str, session: aiohttp.ClientSession) -> list[dict]:
         try:
             async with session.get(url) as response:
                 if response.status == 200:
-                    temp_list = await response.json()
+                    temp_text = await response.text()
+                    temp_list = json.loads(temp_text)
                     if temp_list:
                         posts.extend(temp_list)
                         n += 50
                     else:
                         break
                 else:
-                    print(f"GetPosts HTTP error {response.status}")
+                    print(f"GetPosts HTTP error {response}")
                     break
         except Exception as e:
             print("GetPosts error", e)
@@ -87,21 +89,22 @@ async def GetPostsAttachments(posts: list[dict], session: aiohttp.ClientSession)
         user = post["user"]
         service = post["service"]
 
-        post_url = f'https://kemono.su/api/v1/{service}/user/{user}/post/{post_id}'
+        post_url = f'https://kemono.cr/api/v1/{service}/user/{user}/post/{post_id}'
         attachments = []
         html_content = ""
 
         try:
             async with session.get(post_url) as response:
                 if response.status == 200:
-                    data = await response.json()
+                    temp_text = await response.text()
+                    data = json.loads(temp_text)
                     html_content = data['post'].get('content', '')
                     file = data["post"].get("file")
                     attachments = [file] + data["post"]["attachments"] if file else data["post"]["attachments"]
 
                     all_attachments.append({
                         "title": title,
-                        "url": f'https://kemono.su/{service}/user/{user}/post/{post_id}',
+                        "url": f'https://kemono.cr/{service}/user/{user}/post/{post_id}',
                         "id": post_id,
                         "day":day,
                         "html_content": html_content,
@@ -123,8 +126,9 @@ async def extract_attachments_urls_streamed(
     :param user_url: 用户主页链接
     :param day_mode: 日期模式（0=无，1=前缀，2=后缀）
     """
-    user = user_url.split('https://kemono.su/')[-1]
-    async with aiohttp.ClientSession() as session:
+    user = user_url.split('https://kemono.cr/')[-1]
+    async with create_session() as session:
+        # session.headers.add("Accept", "text/css")
         posts = await GetPosts(user, session)
         for post in posts:
             post_id = post["id"]
@@ -132,13 +136,14 @@ async def extract_attachments_urls_streamed(
             title = post["title"]
             user_id = post["user"]
             service = post["service"]
-            post_url = f'https://kemono.su/api/v1/{service}/user/{user_id}/post/{post_id}'
-            url_out = f'https://kemono.su/{service}/user/{user_id}/post/{post_id}'
+            post_url = f'https://kemono.cr/api/v1/{service}/user/{user_id}/post/{post_id}'
+            url_out = f'https://kemono.cr/{service}/user/{user_id}/post/{post_id}'
 
             try:
                 async with session.get(post_url) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        temp_text = await response.text()
+                        data = json.loads(temp_text)
                         html_content = data['post'].get('content', '')
                         file = data["post"].get("file")
                         attachments = [file] + data["post"]["attachments"] if file else data["post"]["attachments"]
@@ -154,7 +159,7 @@ async def extract_attachments_urls_streamed(
 
                         # 资源分类
                         image_raw, other_files = [], []
-                        base_url = "https://kemono.su/data"
+                        base_url = "https://kemono.cr/data"
                         for att in attachments:
                             name = att.get("name", "")
                             path = att.get("path", "")
