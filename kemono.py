@@ -1,16 +1,19 @@
 import re
 
 import aiohttp
-from cilent_session import create_session
+from cilent_session import session_manager
 import json
 
 from file import sanitize_filename, rename_list
 
 async def extract_attachments_urls(user_url: str) -> list[dict]:
     user = user_url.split('https://kemono.cr/')[-1]
-    async with create_session() as session:
+    try:
+        session = session_manager.create_session(headers={'Accept': 'text/css'})
         posts = await GetPosts(user, session)
         detailed_posts = await GetPostsAttachments(posts, session)
+    finally:
+        await session.close()
 
     result = []
 
@@ -127,8 +130,8 @@ async def extract_attachments_urls_streamed(
     :param day_mode: 日期模式（0=无，1=前缀，2=后缀）
     """
     user = user_url.split('https://kemono.cr/')[-1]
-    async with create_session() as session:
-        # session.headers.add("Accept", "text/css")
+    try:
+        session = session_manager.create_session(headers={'Accept': 'text/css'})
         posts = await GetPosts(user, session)
         for post in posts:
             post_id = post["id"]
@@ -139,53 +142,56 @@ async def extract_attachments_urls_streamed(
             post_url = f'https://kemono.cr/api/v1/{service}/user/{user_id}/post/{post_id}'
             url_out = f'https://kemono.cr/{service}/user/{user_id}/post/{post_id}'
 
-            try:
-                async with session.get(post_url) as response:
-                    if response.status == 200:
-                        temp_text = await response.text()
-                        data = json.loads(temp_text)
-                        html_content = data['post'].get('content', '')
-                        file = data["post"].get("file")
-                        attachments = [file] + data["post"]["attachments"] if file else data["post"]["attachments"]
+            async with session.get(post_url) as response:
+                if response.status == 200:
+                    temp_text = await response.text()
+                    data = json.loads(temp_text)
+                    html_content = data['post'].get('content', '')
+                    file = data["post"].get("file")
+                    attachments = [file] + data["post"]["attachments"] if file else data["post"]["attachments"]
 
-                        # --- 处理文件夹title ---
-                        cleaned_title = sanitize_filename(title)
-                        if day_mode == 1:
-                            folder_title = f"{day}_{cleaned_title}"
-                        elif day_mode == 2:
-                            folder_title = f"{cleaned_title}_{day}"
+                    # --- 处理文件夹title ---
+                    cleaned_title = sanitize_filename(title)
+                    if day_mode == 1:
+                        folder_title = f"{day}_{cleaned_title}"
+                    elif day_mode == 2:
+                        folder_title = f"{cleaned_title}_{day}"
+                    else:
+                        folder_title = cleaned_title
+
+                    # 资源分类
+                    image_raw, other_files = [], []
+                    base_url = "https://kemono.cr/data"
+                    for att in attachments:
+                        name = att.get("name", "")
+                        path = att.get("path", "")
+                        if not name or not path:
+                            continue
+                        ext = name.lower().split('.')[-1]
+                        url = base_url + path
+                        if ext in ("jpg", "jpeg", "png", "gif", "webp"):
+                            image_raw.append({"url": url, "name": name})
                         else:
-                            folder_title = cleaned_title
+                            other_files.append({"url": url, "name": name})
 
-                        # 资源分类
-                        image_raw, other_files = [], []
-                        base_url = "https://kemono.cr/data"
-                        for att in attachments:
-                            name = att.get("name", "")
-                            path = att.get("path", "")
-                            if not name or not path:
-                                continue
-                            ext = name.lower().split('.')[-1]
-                            url = base_url + path
-                            if ext in ("jpg", "jpeg", "png", "gif", "webp"):
-                                image_raw.append({"url": url, "name": name})
-                            else:
-                                other_files.append({"url": url, "name": name})
+                    images = rename_list(image_raw)
+                    external_links = extract_external_links(html_content)
 
-                        images = rename_list(image_raw)
-                        external_links = extract_external_links(html_content)
+                    yield {
+                        "title": folder_title,
+                        "url": url_out,
+                        "id": post_id,
+                        "day": day,
+                        "images": images,
+                        "files": other_files,
+                        "external_links": external_links
+                    }
 
-                        yield {
-                            "title": folder_title,
-                            "url": url_out,
-                            "id": post_id,
-                            "day": day,
-                            "images": images,
-                            "files": other_files,
-                            "external_links": external_links
-                        }
-            except Exception as e:
-                print("GetPostsAttachments error", e)
+    except Exception as e:
+        print("GetPostsAttachments error", e)
+
+    finally:
+        await session.close()
 
 def extract_external_links(html: str) -> list[str]:
     if not html:

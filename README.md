@@ -10,7 +10,7 @@ pip install aiohttp aiofiles
 ```
 ### 2. 运行下载器
 ```bash
-python main.py <kemono主页url> [下载目录] [并发图片数] [并发帖子数] [日期模式]
+python main.py <kemono主页url> [下载目录] [并发图片数] [并发帖子数] [日期模式] [代理]
 ```
 参数说明：
 ```
@@ -28,10 +28,13 @@ python main.py <kemono主页url> [下载目录] [并发图片数] [并发帖子�
 
 [日期模式]
 0 = 不加日期, 1 = 日期前缀, 2 = 日期后缀
+
+[代理]
+请求时使用的网络代理
 ```
 使用示例：
 ```bash
-python main.py https://kemono.su/fanbox/user/123456 ./download 16 2 1
+python main.py https://kemono.su/fanbox/user/123456 ./download 16 2 1 http://127.0.0.1:7890
 ```
 ### 3. 元数据与断点续传
 状态文件会自动写入跨平台目录，无需手动管理

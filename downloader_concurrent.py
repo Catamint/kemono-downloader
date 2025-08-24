@@ -3,7 +3,7 @@ import aiohttp
 import aiofiles
 import asyncio
 from file import set_hidden_windows
-from cilent_session import create_session
+from cilent_session import session_manager
 
 # ---- 1. 文件夹命名 & .post_id 管理 ----
 
@@ -125,7 +125,8 @@ async def download_streamed_posts(post_stream, base_path, concurrency=10, post_c
     """
     sem = asyncio.Semaphore(concurrency)
     post_sem = asyncio.Semaphore(post_concurrency)
-    async with create_session() as session:
+    try:
+        session = session_manager.create_session(headers={'Accept': '*/*'})
         download_post_tasks = []
         async for post in post_stream:
             await post_sem.acquire()
@@ -136,3 +137,6 @@ async def download_streamed_posts(post_stream, base_path, concurrency=10, post_c
             download_post_tasks.append(t)
         if download_post_tasks:
             await asyncio.gather(*download_post_tasks)
+    finally:
+        await session.close()
+
