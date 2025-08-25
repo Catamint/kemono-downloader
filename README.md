@@ -6,7 +6,7 @@
 
 ### 1. **依赖安装**
 ```bash
-pip install aiohttp aiofiles
+pip install -r requirements.txt
 ```
 ### 2. 运行下载器
 ```bash
